@@ -1,0 +1,1807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Son of Anton — Local autonomous optimization</title>
+<meta name="description" content="A deterministic, local automation engine that scores code quality, plans refactors, and purges inefficiency without external dependencies.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%237c6cff'/%3E%3Cpath d='M9 23 16 8l7 15h-4l-3-7-3 7z' fill='%23070b12'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #070b12;
+  --panel: rgba(16, 24, 38, 0.72);
+  --line: rgba(126, 161, 255, 0.16);
+  --text: #dbe6ff;
+  --muted: #8ba0c4;
+  --accent: #7c6cff;
+  --accent-2: #35d6c4;
+  --warm: #ffb86b;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 500px at 12% -10%, rgba(124, 108, 255, 0.3), transparent 60%),
+    radial-gradient(800px 500px at 90% 0%, rgba(53, 214, 196, 0.16), transparent 55%),
+    radial-gradient(700px 600px at 50% 110%, rgba(255, 184, 107, 0.08), transparent 60%),
+    linear-gradient(180deg, #070b12 0%, #080d16 60%, #070b12 100%);
+}
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.35;
+  background-image: linear-gradient(rgba(126, 161, 255, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(126, 161, 255, 0.06) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(circle at 50% 20%, black, transparent 75%);
+}
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 14px clamp(20px, 5vw, 64px);
+  border-bottom: 1px solid var(--line);
+  background: rgba(7, 11, 18, 0.82);
+  backdrop-filter: blur(18px);
+}
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #081018;
+  font-weight: 900;
+  box-shadow: 0 8px 26px rgba(124, 108, 255, 0.35);
+}
+nav { display: flex; gap: 22px; margin-left: auto; font-size: 0.92rem; }
+nav a { color: var(--muted); }
+nav a:hover { color: var(--text); text-decoration: none; }
+.badge {
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--accent-2);
+  background: rgba(53, 214, 196, 0.08);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+.hero { padding: clamp(56px, 9vw, 112px) 0 clamp(36px, 5vw, 64px); position: relative; }
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 18px;
+  color: var(--accent-2);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.eyebrow::before { content: ""; width: 26px; height: 1px; background: currentColor; }
+h1 {
+  max-width: 900px;
+  margin: 0;
+  font-size: clamp(2.6rem, 7vw, 5.5rem);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+h1 span {
+  background: linear-gradient(100deg, #b4a8ff 0%, #35d6c4 55%, #ffcf9a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lede { max-width: 660px; margin: 26px 0 0; color: var(--muted); font-size: clamp(1.02rem, 1.6vw, 1.22rem); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 34px 0 0; }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-weight: 650;
+  font-size: 0.94rem;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.btn:hover { transform: translateY(-2px); text-decoration: none; }
+.btn.primary { background: linear-gradient(135deg, var(--accent), #9b8cff); color: white; box-shadow: 0 12px 34px rgba(124, 108, 255, 0.32); }
+.btn.ghost { border-color: var(--line); color: var(--text); background: rgba(16, 24, 38, 0.6); }
+.btn.ghost:hover { border-color: rgba(126, 161, 255, 0.42); }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin: 54px 0 0;
+}
+.stat { padding: 18px 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); backdrop-filter: blur(12px); }
+.stat dt { color: var(--muted); font-size: 0.74rem; letter-spacing: 0.1em; text-transform: uppercase; }
+.stat dd { margin: 7px 0 0; font-size: 1.28rem; font-weight: 700; letter-spacing: -0.01em; }
+.content-wrap { padding-bottom: 90px; }
+.prose {
+  padding: clamp(28px, 5vw, 58px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(16, 24, 38, 0.86), rgba(11, 17, 28, 0.9));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.35);
+}
+.prose > :first-child { margin-top: 0; }
+.prose h2, .prose h3, .prose h4 { scroll-margin-top: 100px; letter-spacing: -0.02em; line-height: 1.25; }
+.prose h2 { margin: 2.2em 0 0.6em; font-size: clamp(1.5rem, 2.6vw, 2rem); }
+.prose h3 { margin: 1.9em 0 0.5em; font-size: 1.25rem; color: #c9d7ff; }
+.prose h4 { margin: 1.6em 0 0.4em; font-size: 1.05rem; color: #c9d7ff; }
+.prose p, .prose li { color: #b7c6e2; }
+.prose strong { color: var(--text); }
+.prose ul, .prose ol { padding-left: 1.3em; }
+.prose li { margin: 0.35em 0; }
+.prose hr { margin: 2.2em 0; border: 0; border-top: 1px solid var(--line); }
+.prose blockquote { margin: 1.5em 0; padding: 0.4em 1.2em; border-left: 3px solid var(--accent); color: var(--muted); }
+.prose :not(pre) > code {
+  padding: 0.14em 0.4em;
+  border: 1px solid rgba(126, 161, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(124, 108, 255, 0.12);
+  color: #d8d2ff;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.88em;
+}
+.code-block {
+  margin: 1.3em 0;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #05080e;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.code-block code {
+  display: block;
+  padding: 20px 22px;
+  color: #c6d4f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  white-space: pre;
+}
+.prose img { max-width: 100%; height: auto; vertical-align: middle; }
+footer {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 28px 0 46px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.84rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  justify-content: space-between;
+}
+@media (max-width: 860px) {
+  .site-header { gap: 16px; padding: 12px 20px; }
+  nav { display: none; }
+  .badge { margin-left: auto; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 40px; }
+}
+@media (max-width: 520px) {
+  main { width: min(100% - 28px, 1120px); }
+  .brand { font-size: 0.95rem; }
+  .badge { display: none; }
+  .hero { padding-top: 46px; }
+  .actions .btn { flex: 1 1 100%; }
+  .stats { gap: 10px; }
+  .stat { padding: 14px 15px; }
+  .stat dd { font-size: 1.05rem; }
+  .prose { padding: 24px 18px; border-radius: 18px; }
+  footer { width: calc(100% - 28px); }
+}
+.app-shell {
+  margin: 0 0 clamp(40px, 6vw, 72px);
+  padding: clamp(20px, 3.4vw, 34px);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(16, 24, 38, 0.9), rgba(9, 14, 23, 0.94));
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.4);
+}
+.app-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
+.app-head h2 { margin: 0; font-size: clamp(1.6rem, 3vw, 2.2rem); letter-spacing: -0.03em; line-height: 1.15; }
+.app-sub { max-width: 580px; margin: 8px 0 0; color: var(--muted); font-size: 0.95rem; }
+.app-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(7, 11, 18, 0.45);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.range input { width: 110px; accent-color: var(--accent-2); }
+.range output { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.upload-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }
+.upload-bar .mini { padding: 7px 12px; font-size: 0.76rem; font-weight: 600; letter-spacing: 0.01em; text-transform: none; }
+.upload-status { margin-left: 2px; color: var(--muted); font-size: 0.76rem; }
+.upload-status.ok { color: var(--accent-2); }
+.upload-status.warn { color: var(--warm); }
+.app-shell.drag-over { border-color: var(--accent-2); box-shadow: 0 0 0 1px var(--accent-2), 0 30px 90px rgba(0, 0, 0, 0.4); }
+.app-grid { display: grid; grid-template-columns: 220px minmax(0, 1.3fr) minmax(260px, 0.9fr); gap: 12px; }
+.pane { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--line); border-radius: 14px; background: rgba(5, 8, 14, 0.72); overflow: hidden; }
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pane-head .chip { text-transform: none; letter-spacing: 0.03em; }
+.mini {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(124, 108, 255, 0.12);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mini:hover { border-color: rgba(126, 161, 255, 0.42); }
+.file-list { display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow: auto; max-height: 480px; }
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+.file-row:hover { background: rgba(124, 108, 255, 0.1); }
+.file-row.active { border-color: rgba(126, 161, 255, 0.35); background: rgba(124, 108, 255, 0.16); }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip {
+  padding: 2px 7px;
+  border: 1px solid rgba(53, 214, 196, 0.25);
+  border-radius: 999px;
+  background: rgba(53, 214, 196, 0.1);
+  color: var(--accent-2);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.chip.warn { color: var(--warm); background: rgba(255, 184, 107, 0.1); border-color: rgba(255, 184, 107, 0.28); }
+.chip.danger { color: #ff8b9a; background: rgba(255, 90, 110, 0.12); border-color: rgba(255, 90, 110, 0.32); }
+#editor {
+  flex: 1;
+  min-height: 320px;
+  resize: vertical;
+  padding: 14px 16px;
+  border: 0;
+  outline: none;
+  background: #05080e;
+  color: #c6d4f0;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.8rem;
+  line-height: 1.65;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+#editor:disabled { color: var(--muted); }
+.editor-path { text-transform: none; letter-spacing: 0.01em; color: var(--text); font-family: "SFMono-Regular", Consolas, monospace; font-size: 0.76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps { display: flex; flex-direction: column; gap: 6px; padding: 10px; overflow: auto; max-height: 200px; }
+.step { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: rgba(16, 24, 38, 0.55); font-size: 0.78rem; }
+.step-index { color: var(--accent-2); font-weight: 700; font-variant-numeric: tabular-nums; }
+.step strong { display: block; color: var(--text); font-size: 0.8rem; }
+.step code { color: var(--muted); font-size: 0.74rem; word-break: break-all; font-family: "SFMono-Regular", Consolas, monospace; }
+.log {
+  flex: 1;
+  min-height: 180px;
+  max-height: 236px;
+  overflow: auto;
+  padding: 12px;
+  border-top: 1px solid var(--line);
+  background: #05080e;
+  color: #8fa7cc;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+}
+.log-line { white-space: pre-wrap; word-break: break-word; }
+.empty { margin: 10px; color: var(--muted); font-size: 0.78rem; line-height: 1.5; }
+.app-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
+.app-stats div { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(16, 24, 38, 0.5); }
+.app-stats dt { color: var(--muted); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; }
+.app-stats dd { margin: 3px 0 0; font-size: 1.02rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 980px) {
+  .app-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .files { grid-column: 1 / -1; }
+  .file-list { flex-direction: row; flex-wrap: wrap; max-height: none; }
+  .file-row { width: auto; }
+}
+@media (max-width: 640px) {
+  .app-grid { grid-template-columns: minmax(0, 1fr); }
+  .app-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="brand"><span class="brand-mark">A</span> Son of Anton</div>
+  <nav aria-label="Primary">
+    <a href="#app">Run</a>
+    <a href="#overview">Overview</a>
+    <a href="#architecture-core-mechanics">Architecture</a>
+    <a href="#installation-setup">Install</a>
+    <a href="#implementation-code-son-of-anton-cjs">Source</a>
+  </nav>
+  <span class="badge">Local · Zero API keys</span>
+</header>
+<main>
+  <section class="hero">
+    <p class="eyebrow">Deterministic automation engine</p>
+    <h1>Build less.<br><span>Optimize everything.</span></h1>
+    <p class="lede">A standalone, goal-directed planner that scores local assets, plans refactors, and purges inefficiency — entirely on your machine.</p>
+    <div class="actions">
+      <a class="btn primary" href="#app">Run the engine</a>
+      <a class="btn ghost" href="#implementation-code-son-of-anton-cjs">Read the source</a>
+    </div>
+    <dl class="stats">
+      <div class="stat"><dt>Dependencies</dt><dd>Zero</dd></div>
+      <div class="stat"><dt>Search depth</dt><dd>8 levels</dd></div>
+      <div class="stat"><dt>Beam width</dt><dd>20 nodes</dd></div>
+      <div class="stat"><dt>Runtime</dt><dd>Node.js + browser</dd></div>
+    </dl>
+  </section>
+  <section class="app-shell" id="app">
+    <div class="app-head">
+      <div>
+        <p class="eyebrow">Live engine · sandboxed in your browser</p>
+        <h2>Run Son of Anton</h2>
+        <p class="app-sub">Edit the virtual workspace, then let the planner score, refactor, and purge. Nothing here touches your real files.</p>
+      </div>
+      <div class="app-controls">
+        <label class="range" for="aggr">Aggressiveness
+          <input id="aggr" type="range" min="0.1" max="0.9" step="0.05" value="0.5">
+          <output id="aggr-out" for="aggr">0.50</output>
+        </label>
+        <button class="btn ghost" id="reset" type="button">Reset</button>
+        <button class="btn primary" id="run" type="button">Run cycle</button>
+      </div>
+    </div>
+    <div class="upload-bar">
+      <button class="mini" id="upload-files" type="button">Upload files</button>
+      <button class="mini" id="upload-folder" type="button">Upload folder</button>
+      <button class="mini" id="upload-zip" type="button">Upload .zip</button>
+      <button class="mini" id="clear" type="button">Clear</button>
+      <span class="upload-status" id="upload-status" role="status" aria-live="polite">or drop files, folders, or .zip anywhere here</span>
+      <input id="input-files" type="file" multiple hidden>
+      <input id="input-folder" type="file" webkitdirectory directory multiple hidden>
+      <input id="input-zip" type="file" accept=".zip,application/zip" hidden>
+    </div>
+    <div class="app-grid">
+      <aside class="pane files">
+        <div class="pane-head"><span>Workspace</span><button class="mini" id="new-file" type="button">+ File</button></div>
+        <div id="file-list" class="file-list"></div>
+      </aside>
+      <section class="pane">
+        <div class="pane-head"><span id="editor-path" class="editor-path">No file selected</span><span id="editor-score" class="chip">—</span></div>
+        <textarea id="editor" spellcheck="false" aria-label="File contents"></textarea>
+      </section>
+      <section class="pane">
+        <div class="pane-head"><span>Planner output</span><span id="plan-status" class="chip">idle</span></div>
+        <div id="plan-steps" class="steps"></div>
+        <div id="log" class="log" aria-live="polite"></div>
+      </section>
+    </div>
+    <dl class="app-stats">
+      <div><dt>Assets</dt><dd id="stat-files">0</dd></div>
+      <div><dt>Inefficiency</dt><dd id="stat-inefficiency">0%</dd></div>
+      <div><dt>Actions</dt><dd id="stat-actions">0</dd></div>
+      <div><dt>Residual</dt><dd id="stat-residual">0%</dd></div>
+    </dl>
+  </section>
+  <section class="content-wrap">
+    <article class="prose">
+<h2 id="instruction-document-implementing-the-son-of-anton-local-autonomous-optimization-system">Instruction Document: Implementing the &quot;Son of Anton&quot; Local Autonomous Optimization System</h2>
+<h3 id="overview">Overview</h3>
+<p>This document provides complete instructions and source code for setting up a standalone, deterministic automation engine inspired by Son of Anton from HBO's Silicon Valley. Unlike cloud-dependent AI agent wrappers, this system operates entirely locally using structural text evaluation, heuristic scoring, and autonomous file refactoring or purging routines.</p>
+<hr>
+<h3 id="architecture-core-mechanics">Architecture &amp; Core Mechanics</h3>
+<p>The engine operates via a general-purpose, goal-directed state planner (<code>SonOfAnton</code>) that evaluates local assets based on predefined efficiency thresholds and constraints.</p>
+<ul><li><strong>Zero External Dependencies:</strong> Runs natively via Node.js without calling third-party API keys or external large language model services.</li><li><strong>Deterministic Evaluation Engine:</strong> Uses a programmatic scoring function to parse file contents, measuring commentary density, debug logging statements, and dead code patterns against total line counts.</li><li><strong>Autonomous Execution:</strong> If an asset exceeds the designated inefficiency threshold, the system autonomously purges or refactors the file in place.</li></ul>
+<hr>
+<h3 id="installation-setup">Installation &amp; Setup</h3>
+<ol><li>Ensure <strong>Node.js</strong> (v16 or higher) is installed on your local machine.</li><li>Initialize a local project directory and create the core script file:</li></ol>
+<pre class="code-block language-bash"><code>mkdir son-of-anton-engine
+cd son-of-anton-engine
+npm init -y
+</code></pre>
+<ol><li>Save the implementation code below into a file named <code>son-of-anton.cjs</code>.</li></ol>
+<hr>
+<h3 id="implementation-code-son-of-anton-cjs">Implementation Code (<code>son-of-anton.cjs</code>)</h3>
+<pre class="code-block language-javascript"><code>&quot;use strict&quot;;
+
+const fs = require('fs');
+const path = require('path');
+
+const clone = value =&gt; structuredClone(value);
+
+class SonOfAnton {
+  constructor({
+    maxDepth = 8,
+    beamWidth = 20,
+    learningRate = 0.15,
+    aggressiveness = 0.6
+  } = {}) {
+    this.maxDepth = maxDepth;
+    this.beamWidth = beamWidth;
+    this.learningRate = learningRate;
+    this.aggressiveness = aggressiveness;
+    
+    this.capabilities = new Map();
+    this.preferences = new Map();
+    this.memory = [];
+    this.logHistory = [];
+  }
+
+  log(message) {
+    const entry = `[SON OF ANTON] ${new Date().toISOString()} - ${message}`;
+    console.log(entry);
+    this.logHistory.push(entry);
+  }
+
+  register(name, capability) {
+    if (
+      !capability ||
+      typeof capability.score !== &quot;function&quot; ||
+      typeof capability.satisfied !== &quot;function&quot; ||
+      !Array.isArray(capability.actions)
+    ) {
+      throw new Error(&quot;A capability needs score(), satisfied(), and actions[].&quot;);
+    }
+
+    for (const action of capability.actions) {
+      if (
+        typeof action.name !== &quot;string&quot; ||
+        typeof action.predict !== &quot;function&quot;
+      ) {
+        throw new Error(&quot;Each action needs a name and predict().&quot;);
+      }
+    }
+
+    this.capabilities.set(name, capability);
+    return this;
+  }
+
+  getCapability(name) {
+    const capability = this.capabilities.get(name);
+    if (!capability) {
+      throw new Error(`Unknown capability: ${name}`);
+    }
+    return capability;
+  }
+
+  preferenceKey(domain, action) {
+    return JSON.stringify([domain, action]);
+  }
+
+  rank(domain, capability, node, goal) {
+    const progress = capability.score(node.state, goal);
+
+    if (!Number.isFinite(progress)) {
+      throw new Error(&quot;score() must return a finite number.&quot;);
+    }
+
+    const preference = node.steps.reduce((total, step) =&gt; {
+      const key = this.preferenceKey(domain, step.action);
+      return total + (this.preferences.get(key) ?? 0);
+    }, 0);
+
+    return progress - node.cost + preference;
+  }
+
+  plan({ domain, state, goal }) {
+    const capability = this.getCapability(domain);
+
+    const initial = {
+      state: clone(state),
+      steps: [],
+      cost: 0
+    };
+
+    let frontier = [initial];
+    let best = initial;
+
+    for (let depth = 0; depth &lt; this.maxDepth; depth++) {
+      const candidates = [];
+
+      for (const node of frontier) {
+        if (capability.satisfied(node.state, goal)) {
+          return this.describePlan(domain, goal, node, true);
+        }
+
+        for (const action of capability.actions) {
+          const parameters = action.parameters
+            ? action.parameters(clone(node.state), clone(goal))
+            : [{}];
+
+          for (const params of parameters) {
+            if (
+              action.allowed &amp;&amp;
+              !action.allowed(
+                clone(node.state),
+                clone(params),
+                clone(goal)
+              )
+            ) {
+              continue;
+            }
+
+            const predicted = action.predict(
+              clone(node.state),
+              clone(params),
+              clone(goal)
+            );
+
+            const cost = action.cost ?? 1;
+
+            if (!Number.isFinite(cost) || cost &lt; 0) {
+              throw new Error(&quot;Action cost must be finite and nonnegative.&quot;);
+            }
+
+            candidates.push({
+              state: predicted,
+              cost: node.cost + cost,
+              steps: [
+                ...node.steps,
+                {
+                  action: action.name,
+                  params: clone(params)
+                }
+              ]
+            });
+          }
+        }
+      }
+
+      if (!candidates.length) break;
+
+      candidates.sort(
+        (a, b) =&gt;
+          this.rank(domain, capability, b, goal) -
+          this.rank(domain, capability, a, goal)
+      );
+
+      const solved = candidates.find(node =&gt;
+        capability.satisfied(node.state, goal)
+      );
+
+      if (solved) {
+        return this.describePlan(domain, goal, solved, true);
+      }
+
+      if (
+        this.rank(domain, capability, candidates[0], goal) &gt;
+        this.rank(domain, capability, best, goal)
+      ) {
+        best = candidates[0];
+      }
+
+      frontier = candidates.slice(0, this.beamWidth);
+    }
+
+    return this.describePlan(domain, goal, best, false);
+  }
+
+  describePlan(domain, goal, node, predictedSuccess) {
+    return {
+      domain,
+      goal: clone(goal),
+      steps: clone(node.steps),
+      predictedState: clone(node.state),
+      predictedSuccess,
+      cost: node.cost
+    };
+  }
+
+  async execute({
+    plan,
+    state,
+    approve = async () =&gt; true
+  }) {
+    const capability = this.getCapability(plan.domain);
+    let current = clone(state);
+    const completed = [];
+
+    for (const step of plan.steps) {
+      const action = capability.actions.find(
+        item =&gt; item.name === step.action
+      );
+
+      if (!action) {
+        throw new Error(`Unknown action: ${step.action}`);
+      }
+
+      if (
+        action.allowed &amp;&amp;
+        !action.allowed(
+          clone(current),
+          clone(step.params),
+          clone(plan.goal)
+        )
+      ) {
+        throw new Error(`Conditions changed before ${step.action}; replan required.`);
+      }
+
+      if (action.execute) {
+        const approved = await approve({
+          domain: plan.domain,
+          action: step.action,
+          params: clone(step.params),
+          state: clone(current)
+        });
+
+        if (approved !== true) {
+          throw new Error(`Not approved: ${step.action}`);
+        }
+
+        current = await action.execute(
+          clone(current),
+          clone(step.params),
+          clone(plan.goal)
+        );
+      } else {
+        current = action.predict(
+          clone(current),
+          clone(step.params),
+          clone(plan.goal)
+        );
+      }
+
+      completed.push(clone(step));
+
+      if (capability.satisfied(current, plan.goal)) break;
+    }
+
+    const result = {
+      domain: plan.domain,
+      goal: clone(plan.goal),
+      state: clone(current),
+      completed,
+      success: capability.satisfied(current, plan.goal)
+    };
+
+    this.memory.push(clone(result));
+    return result;
+  }
+}
+
+// ============================================================================
+// Codebase Optimization Extension Module
+// ============================================================================
+
+function registerCodebaseCapability(antonInstance, targetDir) {
+  antonInstance.register(&quot;codebase&quot;, {
+    score(state) {
+      // Minimize total remaining inefficiency points
+      return -state.files.reduce((acc, f) =&gt; acc + f.score, 0);
+    },
+
+    satisfied(state) {
+      // Goal is satisfied when all files meet efficiency standard (score &lt; aggressiveness)
+      return state.files.every(f =&gt; f.score &lt; antonInstance.aggressiveness);
+    },
+
+    actions: [
+      {
+        name: &quot;purgeFile&quot;,
+        cost: 0.5,
+        parameters(state) {
+          return state.files
+            .filter(f =&gt; f.score &gt;= antonInstance.aggressiveness)
+            .map(f =&gt; ({ filePath: f.filePath }));
+        },
+        predict(state, { filePath }) {
+          const nextFiles = state.files.filter(f =&gt; f.filePath !== filePath);
+          return { ...state, files: nextFiles };
+        },
+        async execute(state, { filePath }) {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            antonInstance.log(`PURGED inefficient asset: ${filePath}`);
+          }
+          const nextFiles = state.files.filter(f =&gt; f.filePath !== filePath);
+          return { ...state, files: nextFiles };
+        }
+      },
+      {
+        name: &quot;optimizeFile&quot;,
+        cost: 0.2,
+        parameters(state) {
+          return state.files
+            .filter(f =&gt; f.score &gt; 0.1 &amp;&amp; f.score &lt; antonInstance.aggressiveness)
+            .map(f =&gt; ({ filePath: f.filePath }));
+        },
+        predict(state, { filePath }) {
+          const nextFiles = state.files.map(f =&gt; {
+            if (f.filePath === filePath) {
+              return { ...f, score: 0.0 };
+            }
+            return f;
+          });
+          return { ...state, files: nextFiles };
+        },
+        async execute(state, { filePath }) {
+          if (fs.existsSync(filePath)) {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const optimized = content
+              .replace(/\/\/.*/g, '')
+              .replace(/\/\*[\s\S]*?\*\//g, '')
+              .replace(/console\.log.*?;?/g, '')
+              .split('\n')
+              .map(line =&gt; line.trimEnd())
+              .filter(line =&gt; line.trim().length &gt; 0)
+              .join('\n');
+
+            fs.writeFileSync(filePath, optimized, 'utf-8');
+            antonInstance.log(`OPTIMIZED asset in place: ${filePath}`);
+          }
+          const nextFiles = state.files.map(f =&gt; {
+            if (f.filePath === filePath) {
+              return { ...f, score: 0.0 };
+            }
+            return f;
+          });
+          return { ...state, files: nextFiles };
+        }
+      }
+    ]
+  });
+}
+
+// Helper scanner to populate environment state
+function scanDirectory(dir) {
+  let results = [];
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' &amp;&amp; !entry.name.startsWith('.')) {
+        results = results.concat(scanDirectory(fullPath));
+      }
+    } else if (entry.isFile()) {
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      const lines = content.split('\n');
+      
+      let noiseCount = 0;
+      lines.forEach(line =&gt; {
+        const t = line.trim();
+        if (t.startsWith('//') || t.includes('console.log') || t === '') {
+          noiseCount++;
+        }
+      });
+
+      const score = lines.length &gt; 0 ? noiseCount / lines.length : 1.0;
+      results.push({ filePath: fullPath, score });
+    }
+  }
+  return results;
+}
+
+// ============================================================================
+// Execution Example
+// ============================================================================
+
+if (require.main === module) {
+  (async () =&gt; {
+    const target = process.argv[2] || './src';
+    const anton = new SonOfAnton({ aggressiveness: 0.5 });
+
+    if (!fs.existsSync(target)) {
+      fs.mkdirSync(target, { recursive: true });
+      fs.writeFileSync(path.join(target, 'bloated_test.js'), '// TODO: delete this\nconsole.log(&quot;debug noise&quot;);\nconst x = 1;\n');
+    }
+
+    registerCodebaseCapability(anton, target);
+
+    const initialState = {
+      files: scanDirectory(target)
+    };
+
+    anton.log(`Initializing Son of Anton scan on: ${target}`);
+    
+    const plan = anton.plan({
+      domain: &quot;codebase&quot;,
+      state: initialState,
+      goal: {}
+    });
+
+    anton.log(`Generated optimization plan with ${plan.steps.length} steps.`);
+
+    await anton.execute({
+      plan,
+      state: initialState,
+      approve: async (actionDetails) =&gt; {
+        anton.log(`Autonomous Authorization Granted for action: ${actionDetails.action} on ${actionDetails.params.filePath}`);
+        return true;
+      }
+    });
+
+    anton.log(&quot;Autonomous cycle complete.&quot;);
+  })();
+}
+
+module.exports = { SonOfAnton };
+</code></pre>
+<hr>
+<h3 id="execution-instructions">Execution Instructions</h3>
+<p>Run the script directly via Node.js targeting any directory containing code or text assets:</p>
+<pre class="code-block language-bash"><code>node son-of-anton.cjs ./target-directory
+</code></pre>
+<h4 id="browser-workspace-uploads">Browser workspace uploads</h4>
+<p>The live demo runs the same planner against an in-memory workspace:</p>
+<ul><li><strong>Upload files</strong> — select one or more source files.</li><li><strong>Upload folder</strong> — pick an entire directory; relative paths are preserved.</li><li><strong>Upload .zip</strong> — extract a zipped project in the browser (stored and deflated entries).</li><li><strong>Drag and drop</strong> — drop files, folders, or a <code>.zip</code> anywhere on the demo.</li></ul>
+<p>Uploads stay in memory and never touch your disk. <code>node_modules</code>/VCS folders, binaries, files over 512 KB, and archives beyond 500 files are skipped; ZIP64 archives are not supported.</p>
+<h3 id="build-play-and-remix-with-omgithub">🚀 Build, play, and remix with OMGithub</h3>
+<p><strong>Remixed using <a href="https://omgithub.com" target="_blank" rel="noreferrer">OMGithub.com</a>.</strong></p>
+<p><a href="https://omgithub.com/Torchwood4201/SonofAnton" target="_blank" rel="noreferrer"><img alt="OMGithub" src="https://img.shields.io/badge/OMGithub-Open%20project-orange?style=for-the-badge" loading="lazy"></a> <a href="https://github.com/Torchwood4201/SonofAnton" target="_blank" rel="noreferrer"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-Source-181717?logo=github&amp;style=for-the-badge" loading="lazy"></a></p>
+<ul><li>🎮 <a href="https://omgithub.com/Torchwood4201/SonofAnton" target="_blank" rel="noreferrer">Open the project</a>.</li><li>✨ <a href="https://omgithub.com/?remix=Torchwood4201%2FSonofAnton" target="_blank" rel="noreferrer">Remix this project</a>.</li><li>💻 <a href="https://github.com/Torchwood4201/SonofAnton" target="_blank" rel="noreferrer">Explore the source</a>.</li><li>🛠️ <a href="https://github.com/Torchwood4201/SonofAnton/actions" target="_blank" rel="noreferrer">Check build runs</a>.</li><li>🐛 <a href="https://github.com/Torchwood4201/SonofAnton/issues" target="_blank" rel="noreferrer">Report an issue</a>.</li><li>👤 <a href="https://omgithub.com/Torchwood4201" target="_blank" rel="noreferrer">Explore the creator's projects</a>.</li><li>🌍 <a href="https://omgithub.com" target="_blank" rel="noreferrer">Create with OMGithub</a>.</li><li>🧬 <a href="https://github.com/Torchwood4201/SonofAnton" target="_blank" rel="noreferrer">Explore the remix source</a>.</li></ul>
+    </article>
+  </section>
+</main>
+<footer>
+  <span>Son of Anton · Autonomous optimization, locally.</span>
+  <span>Deterministic by design · No cloud calls</span>
+</footer>
+<script>(() => {
+  "use strict";
+
+  const clone = value => structuredClone(value);
+
+  const scoreContent = content => {
+    const lines = content.split("\n");
+    let noise = 0;
+    for (const line of lines) {
+      const t = line.trim();
+      if (t.startsWith("//") || t.includes("console.log") || t === "") {
+        noise++;
+      }
+    }
+    return lines.length > 0 ? noise / lines.length : 1;
+  };
+
+  const stripFile = content => content
+    .replace(/\/\/.*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/console\.log.*?;?/g, "")
+    .split("\n")
+    .map(line => line.trimEnd())
+    .filter(line => line.trim().length > 0)
+    .join("\n");
+
+  class SonOfAnton {
+    constructor({
+      maxDepth = 8,
+      beamWidth = 20,
+      aggressiveness = 0.6,
+      onLog = () => {}
+    } = {}) {
+      this.maxDepth = maxDepth;
+      this.beamWidth = beamWidth;
+      this.aggressiveness = aggressiveness;
+      this.onLog = onLog;
+      this.capabilities = new Map();
+      this.preferences = new Map();
+      this.memory = [];
+      this.logHistory = [];
+    }
+
+    log(message) {
+      const entry = `[SON OF ANTON] ${new Date().toISOString()} - ${message}`;
+      this.logHistory.push(entry);
+      this.onLog(entry);
+    }
+
+    register(name, capability) {
+      if (
+        !capability ||
+        typeof capability.score !== "function" ||
+        typeof capability.satisfied !== "function" ||
+        !Array.isArray(capability.actions)
+      ) {
+        throw new Error("A capability needs score(), satisfied(), and actions[].");
+      }
+
+      for (const action of capability.actions) {
+        if (typeof action.name !== "string" || typeof action.predict !== "function") {
+          throw new Error("Each action needs a name and predict().");
+        }
+      }
+
+      this.capabilities.set(name, capability);
+      return this;
+    }
+
+    getCapability(name) {
+      const capability = this.capabilities.get(name);
+      if (!capability) throw new Error(`Unknown capability: ${name}`);
+      return capability;
+    }
+
+    preferenceKey(domain, action) {
+      return JSON.stringify([domain, action]);
+    }
+
+    rank(domain, capability, node, goal) {
+      const progress = capability.score(node.state, goal);
+      if (!Number.isFinite(progress)) {
+        throw new Error("score() must return a finite number.");
+      }
+      const preference = node.steps.reduce((total, step) => {
+        const key = this.preferenceKey(domain, step.action);
+        return total + (this.preferences.get(key) ?? 0);
+      }, 0);
+      return progress - node.cost + preference;
+    }
+
+    plan({ domain, state, goal }) {
+      const capability = this.getCapability(domain);
+      const initial = { state: clone(state), steps: [], cost: 0 };
+      let frontier = [initial];
+      let best = initial;
+
+      for (let depth = 0; depth < this.maxDepth; depth++) {
+        const candidates = [];
+
+        for (const node of frontier) {
+          if (capability.satisfied(node.state, goal)) {
+            return this.describePlan(domain, goal, node, true);
+          }
+
+          for (const action of capability.actions) {
+            const parameters = action.parameters
+              ? action.parameters(clone(node.state), clone(goal))
+              : [{}];
+
+            for (const params of parameters) {
+              if (
+                action.allowed &&
+                !action.allowed(clone(node.state), clone(params), clone(goal))
+              ) {
+                continue;
+              }
+
+              const predicted = action.predict(clone(node.state), clone(params), clone(goal));
+              const cost = action.cost ?? 1;
+
+              if (!Number.isFinite(cost) || cost < 0) {
+                throw new Error("Action cost must be finite and nonnegative.");
+              }
+
+              candidates.push({
+                state: predicted,
+                cost: node.cost + cost,
+                steps: [...node.steps, { action: action.name, params: clone(params) }]
+              });
+            }
+          }
+        }
+
+        if (!candidates.length) break;
+
+        candidates.sort(
+          (a, b) =>
+            this.rank(domain, capability, b, goal) -
+            this.rank(domain, capability, a, goal)
+        );
+
+        const solved = candidates.find(node => capability.satisfied(node.state, goal));
+        if (solved) return this.describePlan(domain, goal, solved, true);
+
+        if (this.rank(domain, capability, candidates[0], goal) > this.rank(domain, capability, best, goal)) {
+          best = candidates[0];
+        }
+
+        frontier = candidates.slice(0, this.beamWidth);
+      }
+
+      return this.describePlan(domain, goal, best, false);
+    }
+
+    describePlan(domain, goal, node, predictedSuccess) {
+      return {
+        domain,
+        goal: clone(goal),
+        steps: clone(node.steps),
+        predictedState: clone(node.state),
+        predictedSuccess,
+        cost: node.cost
+      };
+    }
+
+    async execute({ plan, state, approve = async () => true }) {
+      const capability = this.getCapability(plan.domain);
+      let current = clone(state);
+      const completed = [];
+
+      for (const step of plan.steps) {
+        const action = capability.actions.find(item => item.name === step.action);
+        if (!action) throw new Error(`Unknown action: ${step.action}`);
+
+        if (
+          action.allowed &&
+          !action.allowed(clone(current), clone(step.params), clone(plan.goal))
+        ) {
+          throw new Error(`Conditions changed before ${step.action}; replan required.`);
+        }
+
+        if (action.execute) {
+          const approved = await approve({
+            domain: plan.domain,
+            action: step.action,
+            params: clone(step.params),
+            state: clone(current)
+          });
+          if (approved !== true) throw new Error(`Not approved: ${step.action}`);
+          current = await action.execute(clone(current), clone(step.params), clone(plan.goal));
+        } else {
+          current = action.predict(clone(current), clone(step.params), clone(plan.goal));
+        }
+
+        completed.push(clone(step));
+        if (capability.satisfied(current, plan.goal)) break;
+      }
+
+      const result = {
+        domain: plan.domain,
+        goal: clone(plan.goal),
+        state: clone(current),
+        completed,
+        success: capability.satisfied(current, plan.goal)
+      };
+
+      this.memory.push(clone(result));
+      return result;
+    }
+  }
+
+  function registerCodebaseCapability(anton, workspace) {
+    anton.register("codebase", {
+      score(state) {
+        return -state.files.reduce((acc, f) => acc + f.score, 0);
+      },
+
+      satisfied(state) {
+        return state.files.every(f => f.score < anton.aggressiveness);
+      },
+
+      actions: [
+        {
+          name: "purgeFile",
+          cost: 0.5,
+          parameters(state) {
+            return state.files
+              .filter(f => f.score >= anton.aggressiveness)
+              .map(f => ({ filePath: f.filePath }));
+          },
+          predict(state, { filePath }) {
+            return { ...state, files: state.files.filter(f => f.filePath !== filePath) };
+          },
+          async execute(state, { filePath }) {
+            anton.log(`PURGED inefficient asset: ${filePath}`);
+            return { ...state, files: state.files.filter(f => f.filePath !== filePath) };
+          }
+        },
+        {
+          name: "optimizeFile",
+          cost: 0.2,
+          parameters(state) {
+            return state.files
+              .filter(f => f.score > 0.1 && f.score < anton.aggressiveness)
+              .map(f => ({ filePath: f.filePath }));
+          },
+          predict(state, { filePath }) {
+            return {
+              ...state,
+              files: state.files.map(f =>
+                f.filePath === filePath ? { ...f, content: stripFile(f.content), score: 0 } : f
+              )
+            };
+          },
+          async execute(state, { filePath }) {
+            anton.log(`OPTIMIZED asset in place: ${filePath}`);
+            return {
+              ...state,
+              files: state.files.map(f =>
+                f.filePath === filePath ? { ...f, content: stripFile(f.content), score: 0 } : f
+              )
+            };
+          }
+        }
+      ]
+    });
+  }
+
+  const PRESETS = [
+    {
+      filePath: "src/bloated_test.js",
+      content: [
+        "// TODO: delete this",
+        'console.log("debug noise");',
+        "",
+        "function legacy() {",
+        "  // temporary scaffold",
+        '  console.log("trace");',
+        "  return 1;",
+        "}",
+        ""
+      ].join("\n")
+    },
+    {
+      filePath: "src/util.js",
+      content: [
+        "// format a label",
+        "function label(name) {",
+        "  return name.trim();",
+        "}",
+        "",
+        "module.exports = label;",
+        ""
+      ].join("\n")
+    },
+    {
+      filePath: "src/app.js",
+      content: [
+        'const express = require("express");',
+        'const label = require("./util");',
+        "",
+        "const app = express();",
+        'app.get("/", (req, res) => res.send(label(" Son of Anton ")));',
+        "",
+        "app.listen(3000);",
+        ""
+      ].join("\n")
+    }
+  ];
+
+  const MAX_FILES = 500;
+  const MAX_FILE_BYTES = 512 * 1024;
+  const MAX_ARCHIVE_BYTES = 25 * 1024 * 1024;
+  const IGNORED_SEGMENTS = new Set([
+    "node_modules",
+    ".git",
+    ".hg",
+    ".svn",
+    ".DS_Store"
+  ]);
+  const BINARY_EXTENSIONS = /\.(png|jpe?g|gif|webp|ico|bmp|tiff?|pdf|zip|gz|tgz|bz2|xz|7z|rar|tar|woff2?|ttf|otf|eot|mp3|mp4|mov|avi|mkv|wav|ogg|flac|wasm|exe|dll|so|dylib|jar|class|pyc|bin|glb|gltf|psd|ai|sketch)$/i;
+
+  const normalizePath = value => String(value)
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter(segment => segment && segment !== "." && segment !== "..")
+    .join("/");
+
+  const isIgnored = filePath => normalizePath(filePath)
+    .split("/")
+    .some(segment => IGNORED_SEGMENTS.has(segment));
+
+  const looksBinary = buffer => {
+    const bytes = new Uint8Array(buffer, 0, Math.min(buffer.byteLength, 8192));
+    for (const byte of bytes) {
+      if (byte === 0) return true;
+    }
+    return false;
+  };
+
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("This browser cannot decompress ZIP entries.");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  function findEndOfCentralDirectory(view) {
+    const minimum = Math.max(0, view.byteLength - 22 - 0xffff);
+    for (let offset = view.byteLength - 22; offset >= minimum; offset--) {
+      if (view.getUint32(offset, true) === 0x06054b50) return offset;
+    }
+    return -1;
+  }
+
+  async function readZip(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const view = new DataView(buffer);
+    const eocd = findEndOfCentralDirectory(view);
+    if (eocd < 0) throw new Error("Not a readable ZIP archive.");
+
+    const entryCount = view.getUint16(eocd + 10, true);
+    const directoryOffset = view.getUint32(eocd + 16, true);
+    if (entryCount === 0xffff || directoryOffset === 0xffffffff) {
+      throw new Error("ZIP64 archives are not supported yet.");
+    }
+
+    const decoder = new TextDecoder("utf-8");
+    const entries = [];
+    let cursor = directoryOffset;
+
+    for (let index = 0; index < entryCount; index++) {
+      if (view.getUint32(cursor, true) !== 0x02014b50) break;
+
+      const flags = view.getUint16(cursor + 8, true);
+      const method = view.getUint16(cursor + 10, true);
+      const compressedSize = view.getUint32(cursor + 20, true);
+      const uncompressedSize = view.getUint32(cursor + 24, true);
+      const nameLength = view.getUint16(cursor + 28, true);
+      const extraLength = view.getUint16(cursor + 30, true);
+      const commentLength = view.getUint16(cursor + 32, true);
+      const localOffset = view.getUint32(cursor + 42, true);
+      const name = decoder.decode(bytes.subarray(cursor + 46, cursor + 46 + nameLength));
+
+      cursor += 46 + nameLength + extraLength + commentLength;
+
+      if (name.endsWith("/") || name.endsWith("\\")) continue;
+      if (flags & 0x1) continue;
+      if (
+        compressedSize === 0xffffffff ||
+        uncompressedSize === 0xffffffff ||
+        localOffset === 0xffffffff
+      ) {
+        continue;
+      }
+      if (uncompressedSize > MAX_FILE_BYTES) continue;
+      if (method !== 0 && method !== 8) continue;
+
+      if (view.getUint32(localOffset, true) !== 0x04034b50) continue;
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.subarray(dataStart, dataStart + compressedSize);
+
+      let content;
+      try {
+        const raw = method === 0 ? compressed : await inflateRaw(compressed);
+        content = decoder.decode(raw);
+      } catch {
+        continue;
+      }
+
+      entries.push({ path: name, content });
+    }
+
+    if (!entries.length) throw new Error("The ZIP contains no readable text files.");
+    return entries;
+  }
+
+  const readDirectoryBatch = reader => new Promise((resolve, reject) => {
+    reader.readEntries(resolve, reject);
+  });
+
+  async function walkEntry(entry, prefix, output) {
+    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+    if (entry.isFile) {
+      const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+      output.push({ file, path });
+      return;
+    }
+
+    if (!entry.isDirectory) return;
+
+    const reader = entry.createReader();
+    while (true) {
+      const batch = await readDirectoryBatch(reader);
+      if (!batch.length) break;
+      for (const child of batch) {
+        await walkEntry(child, path, output);
+      }
+    }
+  }
+
+  async function collectDroppedItems(dataTransfer) {
+    const roots = [];
+    for (const item of dataTransfer.items) {
+      if (item.kind !== "file") continue;
+      const entry = typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null;
+      if (entry) roots.push(entry);
+    }
+
+    if (!roots.length) {
+      return [...dataTransfer.files].map(file => ({ file, path: file.name }));
+    }
+
+    const output = [];
+    for (const root of roots) {
+      await walkEntry(root, "", output);
+    }
+    return output;
+  }
+
+  async function prepareUploads(items) {
+    const files = [];
+    let skipped = 0;
+
+    for (const item of items) {
+      if (files.length >= MAX_FILES) {
+        skipped++;
+        continue;
+      }
+
+      const path = normalizePath(item.path || item.file.name);
+      if (!path || isIgnored(path)) {
+        skipped++;
+        continue;
+      }
+
+      if (/\.zip$/i.test(item.file.name)) {
+        if (item.file.size > MAX_ARCHIVE_BYTES) {
+          skipped++;
+          continue;
+        }
+        try {
+          const entries = await readZip(await item.file.arrayBuffer());
+          for (const entry of entries) {
+            if (files.length >= MAX_FILES) {
+              skipped++;
+              continue;
+            }
+            const entryPath = normalizePath(entry.path);
+            if (!entryPath || isIgnored(entryPath)) {
+              skipped++;
+              continue;
+            }
+            files.push({ path: entryPath, content: entry.content });
+          }
+        } catch {
+          skipped++;
+        }
+        continue;
+      }
+
+      if (BINARY_EXTENSIONS.test(path)) {
+        skipped++;
+        continue;
+      }
+
+      if (item.file.size > MAX_FILE_BYTES) {
+        skipped++;
+        continue;
+      }
+
+      const buffer = await item.file.arrayBuffer();
+      if (looksBinary(buffer)) {
+        skipped++;
+        continue;
+      }
+
+      files.push({ path, content: new TextDecoder("utf-8").decode(buffer) });
+    }
+
+    return { files, skipped };
+  }
+
+  function addFiles(files) {
+    let added = 0;
+    let capped = 0;
+
+    for (const entry of files) {
+      const file = makeFile(entry.path, entry.content);
+      const existing = workspace.findIndex(item => item.filePath === entry.path);
+      if (existing >= 0) {
+        workspace[existing] = file;
+      } else if (workspace.length >= MAX_FILES) {
+        capped++;
+        continue;
+      } else {
+        workspace.push(file);
+      }
+      added++;
+    }
+
+    return { added, capped };
+  }
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    list: $("file-list"),
+    editor: $("editor"),
+    editorPath: $("editor-path"),
+    editorScore: $("editor-score"),
+    planSteps: $("plan-steps"),
+    planStatus: $("plan-status"),
+    log: $("log"),
+    run: $("run"),
+    reset: $("reset"),
+    newFile: $("new-file"),
+    clear: $("clear"),
+    uploadFiles: $("upload-files"),
+    uploadFolder: $("upload-folder"),
+    uploadZip: $("upload-zip"),
+    inputFiles: $("input-files"),
+    inputFolder: $("input-folder"),
+    inputZip: $("input-zip"),
+    uploadStatus: $("upload-status"),
+    shell: $("app"),
+    aggr: $("aggr"),
+    aggrOut: $("aggr-out"),
+    statFiles: $("stat-files"),
+    statInefficiency: $("stat-inefficiency"),
+    statActions: $("stat-actions"),
+    statResidual: $("stat-residual")
+  };
+
+  const escapeHtml = value => String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+
+  let workspace = [];
+  let selected = null;
+  let engine = null;
+  let running = false;
+
+  const makeFile = (filePath, content) => ({
+    filePath,
+    content,
+    score: scoreContent(content)
+  });
+
+  const totalScore = () => workspace.reduce((sum, f) => sum + f.score, 0);
+
+  const selectedFile = () => workspace.find(f => f.filePath === selected);
+
+  function resetWorkspace() {
+    workspace = PRESETS.map(preset => makeFile(preset.filePath, preset.content));
+    selected = workspace[0]?.filePath ?? null;
+    els.log.innerHTML = "";
+    els.planSteps.innerHTML = "";
+    els.planStatus.textContent = "idle";
+    els.planStatus.className = "chip";
+    setUploadStatus("or drop files, folders, or .zip anywhere here");
+    renderEditor();
+    renderList();
+    renderStats(0);
+  }
+
+  function setUploadStatus(message, tone = "") {
+    els.uploadStatus.textContent = message;
+    els.uploadStatus.className = `upload-status${tone ? ` ${tone}` : ""}`;
+  }
+
+  function afterWorkspaceChange(firstPath) {
+    if (firstPath) selected = firstPath;
+    if (!workspace.some(file => file.filePath === selected)) {
+      selected = workspace[0]?.filePath ?? null;
+    }
+    els.planSteps.innerHTML = '<p class="empty">Workspace updated — run a cycle to plan again.</p>';
+    els.planStatus.textContent = "idle";
+    els.planStatus.className = "chip";
+    renderList();
+    renderEditor();
+    renderStats(0);
+  }
+
+  async function ingestItems(items, label) {
+    setUploadStatus(`Reading ${label}…`);
+    try {
+      const { files, skipped } = await prepareUploads(items);
+      if (!files.length) {
+        setUploadStatus(
+          `No readable text files found${skipped ? ` (${skipped} skipped)` : ""}.`,
+          "warn"
+        );
+        return;
+      }
+      const { added, capped } = addFiles(files);
+      const skippedTotal = skipped + capped;
+      afterWorkspaceChange(files[0].path);
+      setUploadStatus(
+        `Added ${added} file${added === 1 ? "" : "s"}${skippedTotal ? ` · skipped ${skippedTotal}` : ""}.`,
+        added > 0 ? "ok" : "warn"
+      );
+    } catch (error) {
+      setUploadStatus(error.message || "Upload failed.", "warn");
+    }
+  }
+
+  function clearWorkspace() {
+    workspace = [];
+    selected = null;
+    els.log.innerHTML = "";
+    els.planSteps.innerHTML = "";
+    els.planStatus.textContent = "idle";
+    els.planStatus.className = "chip";
+    setUploadStatus("Workspace cleared.");
+    renderList();
+    renderEditor();
+    renderStats(0);
+  }
+
+  function renderList() {
+    if (!workspace.length) {
+      els.list.innerHTML = '<p class="empty">Workspace clean. Reset to load the sample assets.</p>';
+      return;
+    }
+
+    els.list.innerHTML = workspace.map(file => {
+      const active = file.filePath === selected ? " active" : "";
+      const tone = file.score >= Number(els.aggr.value)
+        ? " danger"
+        : file.score > 0.1
+          ? " warn"
+          : "";
+      return `<button class="file-row${active}" data-path="${escapeHtml(file.filePath)}">
+        <span class="file-name">${escapeHtml(file.filePath)}</span>
+        <span class="chip${tone}">${Math.round(file.score * 100)}%</span>
+      </button>`;
+    }).join("");
+  }
+
+  function renderEditor() {
+    const file = selectedFile();
+    if (!file) {
+      els.editorPath.textContent = "No file selected";
+      els.editorScore.textContent = "—";
+      els.editorScore.className = "chip";
+      els.editor.value = "";
+      els.editor.disabled = true;
+      return;
+    }
+
+    els.editor.disabled = false;
+    els.editorPath.textContent = file.filePath;
+    els.editor.value = file.content;
+    els.editorScore.textContent = `${Math.round(file.score * 100)}% inefficient`;
+    els.editorScore.className = file.score >= Number(els.aggr.value)
+      ? "chip danger"
+      : file.score > 0.1
+        ? "chip warn"
+        : "chip";
+  }
+
+  function renderStats(actions) {
+    els.statFiles.textContent = String(workspace.length);
+    els.statInefficiency.textContent = `${Math.round(totalScore() * 100)}%`;
+    els.statActions.textContent = String(actions);
+    els.statResidual.textContent = `${Math.round(totalScore() * 100)}%`;
+  }
+
+  function renderPlan(plan, result) {
+    const steps = result ? result.completed : plan.steps;
+    els.planStatus.textContent = result
+      ? result.success ? "converged" : "partial"
+      : plan.predictedSuccess ? "ready" : "best effort";
+    els.planStatus.className = result && result.success ? "chip" : "chip warn";
+
+    if (!steps.length) {
+      els.planSteps.innerHTML = '<p class="empty">No actions required — every asset is below the threshold.</p>';
+      return;
+    }
+
+    els.planSteps.innerHTML = steps.map((step, index) => `
+      <div class="step">
+        <span class="step-index">${String(index + 1).padStart(2, "0")}</span>
+        <div>
+          <strong>${escapeHtml(step.action)}</strong>
+          <code>${escapeHtml(step.params.filePath || "")}</code>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  function appendLog(entry) {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    line.textContent = entry;
+    els.log.appendChild(line);
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  async function runCycle() {
+    if (running) return;
+    running = true;
+    els.run.disabled = true;
+    els.log.innerHTML = "";
+    els.planSteps.innerHTML = "";
+
+    try {
+      const aggressiveness = Number(els.aggr.value);
+      workspace = workspace.map(file => ({ ...file, score: scoreContent(file.content) }));
+
+      engine = new SonOfAnton({ aggressiveness, onLog: appendLog });
+      registerCodebaseCapability(engine, workspace);
+
+      const state = { files: clone(workspace) };
+
+      engine.log(`Initializing Son of Anton scan on: virtual workspace (${workspace.length} files)`);
+
+      const plan = engine.plan({ domain: "codebase", state, goal: {} });
+      engine.log(`Generated optimization plan with ${plan.steps.length} steps.`);
+      renderPlan(plan, null);
+
+      const result = await engine.execute({
+        plan,
+        state,
+        approve: async actionDetails => {
+          engine.log(
+            `Autonomous Authorization Granted for action: ${actionDetails.action} on ${actionDetails.params.filePath}`
+          );
+          return true;
+        }
+      });
+
+      workspace = result.state.files;
+      if (!workspace.some(file => file.filePath === selected)) {
+        selected = workspace[0]?.filePath ?? null;
+      }
+
+      renderPlan(plan, result);
+      renderList();
+      renderEditor();
+      renderStats(result.completed.length);
+      engine.log("Autonomous cycle complete.");
+    } catch (error) {
+      appendLog(`[SON OF ANTON] ERROR - ${error.message}`);
+      els.planStatus.textContent = "error";
+      els.planStatus.className = "chip danger";
+    } finally {
+      running = false;
+      els.run.disabled = false;
+    }
+  }
+
+  els.list.addEventListener("click", event => {
+    const row = event.target.closest(".file-row");
+    if (!row) return;
+    selected = row.dataset.path;
+    renderList();
+    renderEditor();
+  });
+
+  els.editor.addEventListener("input", () => {
+    const file = selectedFile();
+    if (!file) return;
+    file.content = els.editor.value;
+    file.score = scoreContent(file.content);
+    renderList();
+    els.editorScore.textContent = `${Math.round(file.score * 100)}% inefficient`;
+    els.editorScore.className = file.score >= Number(els.aggr.value)
+      ? "chip danger"
+      : file.score > 0.1
+        ? "chip warn"
+        : "chip";
+    renderStats(0);
+  });
+
+  els.aggr.addEventListener("input", () => {
+    els.aggrOut.textContent = Number(els.aggr.value).toFixed(2);
+    renderList();
+    renderEditor();
+  });
+
+  els.run.addEventListener("click", runCycle);
+  els.reset.addEventListener("click", resetWorkspace);
+  els.clear.addEventListener("click", clearWorkspace);
+
+  els.newFile.addEventListener("click", () => {
+    let index = 1;
+    let filePath = "src/new-file.js";
+    while (workspace.some(file => file.filePath === filePath)) {
+      index++;
+      filePath = `src/new-file-${index}.js`;
+    }
+    workspace.push(makeFile(filePath, "// scratch file\n\nexport const value = 1;\n"));
+    afterWorkspaceChange(filePath);
+    setUploadStatus("Added 1 file.");
+    els.editor.focus();
+  });
+
+  els.uploadFiles.addEventListener("click", () => els.inputFiles.click());
+  els.uploadFolder.addEventListener("click", () => els.inputFolder.click());
+  els.uploadZip.addEventListener("click", () => els.inputZip.click());
+
+  els.inputFiles.addEventListener("change", async () => {
+    const files = [...els.inputFiles.files];
+    els.inputFiles.value = "";
+    await ingestItems(files.map(file => ({ file, path: file.name })), "files");
+  });
+
+  els.inputFolder.addEventListener("change", async () => {
+    const files = [...els.inputFolder.files];
+    els.inputFolder.value = "";
+    await ingestItems(
+      files.map(file => ({ file, path: file.webkitRelativePath || file.name })),
+      "folder"
+    );
+  });
+
+  els.inputZip.addEventListener("change", async () => {
+    const files = [...els.inputZip.files];
+    els.inputZip.value = "";
+    await ingestItems(files.map(file => ({ file, path: file.name })), "archive");
+  });
+
+  let dragDepth = 0;
+
+  els.shell.addEventListener("dragenter", event => {
+    if (!event.dataTransfer || ![...event.dataTransfer.types].includes("Files")) return;
+    event.preventDefault();
+    dragDepth++;
+    els.shell.classList.add("drag-over");
+  });
+
+  els.shell.addEventListener("dragover", event => {
+    if (!event.dataTransfer) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  });
+
+  els.shell.addEventListener("dragleave", () => {
+    dragDepth = Math.max(0, dragDepth - 1);
+    if (dragDepth === 0) els.shell.classList.remove("drag-over");
+  });
+
+  els.shell.addEventListener("drop", async event => {
+    if (!event.dataTransfer) return;
+    event.preventDefault();
+    dragDepth = 0;
+    els.shell.classList.remove("drag-over");
+    const items = await collectDroppedItems(event.dataTransfer);
+    await ingestItems(items, "dropped items");
+  });
+
+  els.aggrOut.textContent = Number(els.aggr.value).toFixed(2);
+  resetWorkspace();
+})();
+</script>
+</body>
+</html>

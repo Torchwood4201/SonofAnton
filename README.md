@@ -465,6 +465,17 @@ node son-of-anton.cjs ./target-directory
 
 ```
 
+### Browser workspace uploads
+
+The live demo runs the same planner against an in-memory workspace:
+
+- **Upload files** — select one or more source files.
+- **Upload folder** — pick an entire directory; relative paths are preserved.
+- **Upload .zip** — extract a zipped project in the browser (stored and deflated entries).
+- **Drag and drop** — drop files, folders, or a `.zip` anywhere on the demo.
+
+Uploads stay in memory and never touch your disk. `node_modules`/VCS folders, binaries, files over 512 KB, and archives beyond 500 files are skipped; ZIP64 archives are not supported.
+
 <!-- omgithub:readme:start -->
 ## 🚀 Build, play, and remix with OMGithub
 
